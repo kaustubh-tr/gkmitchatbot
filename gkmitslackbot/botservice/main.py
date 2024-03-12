@@ -10,7 +10,8 @@ from pydantic import Field
 from langchain_openai import ChatOpenAI
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_core.output_parsers import StrOutputParser
-from langchain.tools import BaseTool, StructuredTool, tool, DuckDuckGoSearchRun
+from langchain.tools import BaseTool, StructuredTool, tool
+# from langchain.tools import DuckDuckGoSearchRun
 from langchain.prompts.chat import (
     SystemMessagePromptTemplate as SystemTemplate,
     HumanMessagePromptTemplate as HumanTemplate,
@@ -24,7 +25,7 @@ from sqlalchemy import MetaData, Table, Column, Integer, String, DateTime, creat
 from sqlalchemy.orm import sessionmaker
 from datetime import datetime
 
-from .models import Chat_History
+from .models import chat_history
 
 load_dotenv()
 output_parser = StrOutputParser()
@@ -33,14 +34,15 @@ llm = ChatOpenAI(model="gpt-3.5-turbo-0125", temperature=0)
 openai_api_key = os.getenv('OPENAI_API_KEY')
 
 metadata = MetaData()
+metadata = MetaData()
 chat_history_table = Table(
     'botservice_chat_history',
     metadata,
-    Column('ID', Integer, primary_key=True),
-    Column('Message', String),
-    Column('Response', String),
-    Column('Timestamp', DateTime),
-    Column('Employee_ID_id', Integer)
+    Column('id', Integer, primary_key=True),
+    Column('message', String),
+    Column('response', String),
+    Column('timestamp', DateTime),
+    Column('employee_id_id', Integer)
 )
 
 class GkmitChatBot:
@@ -90,9 +92,9 @@ class GkmitChatBot:
             # print(answer['output'])
 
             self.save_conversation_in_database({
-                "Message": question,
-                "Response": answer['output'],
-                "Employee_ID_id": 2
+                "message": question,
+                "response": answer['output'],
+                "employee_id_id": 2
             })
 
             return answer
@@ -113,7 +115,7 @@ class GkmitChatBot:
     def get_stored_skills(self):
         engine = self.get_postgres_conn()
         with engine.connect() as conn:
-            result = conn.execute(text("""SELECT LOWER(s."Skill_Name") FROM botservice_skill s ;"""))
+            result = conn.execute(text("""SELECT LOWER(s."skill_name") FROM botservice_skill s ;"""))
             stored_skills = [row[0] for row in result.fetchall()]
         return stored_skills
 
@@ -139,20 +141,20 @@ class GkmitChatBot:
         def get_employee_from_database_tool(skill: str = Field(description="skill")):
             engine = self.get_postgres_conn()
             with engine.connect() as conn:  # with start and close the connection
-                print(sa.text(f"""SELECT EXISTS(SELECT 1 FROM botservice_skill WHERE LOWER("Skill_Name") = LOWER('{skill}'))"""))
-                skill_exists = conn.execute(sa.text(f"""SELECT EXISTS(SELECT 1 FROM botservice_skill WHERE LOWER("Skill_Name") = LOWER('{skill}'))""")).scalar()
+                print(sa.text(f"""SELECT EXISTS(SELECT 1 FROM botservice_skill WHERE LOWER("skill_name") = LOWER('{skill}'))"""))
+                skill_exists = conn.execute(sa.text(f"""SELECT EXISTS(SELECT 1 FROM botservice_skill WHERE LOWER("skill_name") = LOWER('{skill}'))""")).scalar()
                 print(skill_exists)
                 if skill_exists:
                     # query = GET_EMPLOYEES_DETAILS_EXACT.format(skill)
                     print(skill_exists)
                     temp = pd.read_sql(f"""
-                    SELECT e."First_Name", e."Last_Name", e."Is_Remote_Employee", s."Skill_Name", es."Skill_Proficiency", e."Job_Level", e."Designation", e."Job_Description"
+                    SELECT e."first_name", e."last_name", e."is_remote_employee", s."skill_name", es."skill_proficiency", e."job_level", e."designation", e."job_description"
                     FROM botservice_emp_skill es
-                    JOIN botservice_employee e ON es."Employee_ID_id" = e."ID"
-                    JOIN botservice_skill s ON es."Skill_ID_id" = s."ID"
-                    WHERE LOWER(s."Skill_Name") = LOWER('{skill}')
+                    JOIN botservice_employee e ON es."employee_id_id" = e."id"
+                    JOIN botservice_skill s ON es."skill_id_id" = s."id"
+                    WHERE LOWER(s."skill_name") = LOWER('{skill}')
                     ORDER BY
-                        CASE es."Skill_Proficiency"
+                        CASE es."skill_proficiency"
                             WHEN 'Expert' THEN 1
                             WHEN 'Intermediate' THEN 2
                             WHEN 'Beginner' THEN 3
@@ -170,13 +172,13 @@ class GkmitChatBot:
 
                     # query = GET_EMPLOYEES_DETAILS_EXACT.format(related_skill)
                     temp = pd.read_sql(f"""
-                    SELECT e."First_Name", e."Last_Name", e."Is_Remote_Employee", s."Skill_Name", es."Skill_Proficiency", e."Job_Level", e."Designation", e."Job_Description"
+                    SELECT e."first_name", e."last_name", e."is_remote_employee", s."skill_name", es."skill_proficiency", e."job_level", e."designation", e."job_description"
                     FROM botservice_emp_skill es
-                    JOIN botservice_employee e ON es."Employee_ID_id" = e."ID"
-                    JOIN botservice_skill s ON es."Skill_ID_id" = s."ID"
-                    WHERE LOWER(s."Skill_Name") = LOWER('{related_skill}')
+                    JOIN botservice_employee e ON es."employee_id_id" = e."id"
+                    JOIN botservice_skill s ON es."skill_id_id" = s."id"
+                    WHERE LOWER(s."skill_name") = LOWER('{related_skill}')
                     ORDER BY
-                        CASE es."Skill_Proficiency"
+                        CASE es."skill_proficiency"
                             WHEN 'Expert' THEN 1
                             WHEN 'Intermediate' THEN 2
                             WHEN 'Beginner' THEN 3
@@ -189,7 +191,7 @@ class GkmitChatBot:
             name="SKILL_BY_USER_INPUT",
             func=get_employee_from_database_tool,
             description='''
-            Take only the technical skill as input and return all the employee detail associated with that skill in the paragraph format. \
+            Take only the technical skill as input and return the employee detail associated with that skill in the paragraph format. \
             If skill matches the if skill_exists is true then move to 'if' condition otherwise move to 'else' condition. If the related_skill is also not found in the database then reply Sorry, skill not found and provide him with some source from where he can learn. \
             If exact skill is not found and related skill is found then before giving the employee detials mention that "I cannot found the detail related to {skill} but you may connect to the following person". \
             If it goes in 'else' condition then before returning employee details, mention that the employe detail retuned is of the related person. \
@@ -263,10 +265,10 @@ class GkmitChatBot:
 
         try:
             insert_query = chat_history_table.insert().values(
-                Message=Message,
-                Response=Response,
-                Timestamp=Timestamp,
-                Employee_ID_id=Employee_ID_id
+                message=conversation["message"],
+                response=conversation["response"],
+                timestamp=datetime.now(),
+                employee_id_id=conversation["employee_id_id"]
             )
             session.execute(insert_query)
             session.commit()
@@ -284,7 +286,7 @@ class GkmitChatBot:
 
     def get_chat_history(self):
         try:
-            chat_history = Chat_History.objects.order_by('-Timestamp')[:1]
+            chat_history = chat_history.objects.order_by('-timestamp')[:5]
             return chat_history
             
         except Exception as e:

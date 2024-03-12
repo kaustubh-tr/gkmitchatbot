@@ -78,7 +78,7 @@ WSGI_APPLICATION = "gkmitslackbot.wsgi.application"
 DATABASES = {
     'default': {
         'ENGINE': 'django.db.backends.postgresql',
-        'NAME': 'Employee_Details',
+        'NAME': 'employee_details',
         'USER': 'postgres',
         'PASSWORD': 'maYa@123',
         'HOST': 'localhost',
