@@ -1,101 +1,92 @@
 import os
 import json
-from django.http import JsonResponse
+import logging
+import time
+import threading
+from datetime import datetime
+from django.http import JsonResponse, HttpResponse
 from django.views.decorators.csrf import csrf_exempt
-from .main import GkmitChatBot
+from django.core.exceptions import ObjectDoesNotExist
+from django.utils import timezone
+from django.db import transaction, IntegrityError
+from django.db.models import Q
+from .models import *
+from .chatbot.main import GkmitChatBot
 from slack_sdk.signature import SignatureVerifier
 from slack_sdk import WebClient
 from slack_sdk.errors import SlackApiError
 from dotenv import load_dotenv
+
+from openai import OpenAI
+from langchain_openai import ChatOpenAI
+from langchain_core.output_parsers import StrOutputParser
+from langchain_openai import ChatOpenAI
+from langchain.prompts import PromptTemplate
+
+from rest_framework.views import APIView
+from rest_framework.response import Response
+from rest_framework import status
+from django.conf import settings
+from django.db import transaction
+from django.utils import timezone
+import langchain
+langchain.debug = False
+from .slackbot.employee_details import (
+    get_slack_user_ids, 
+    delete_non_existing_employees, 
+    update_or_create_employee, 
+    update_employee_fields, 
+    process_member_details,
+)
+from .slackbot.save_skills import save_skills_to_database
+from .slackbot.others import add_chat_history_to_conversation_memory, get_skill_list_from_llm
+
 load_dotenv()
+output_parser = StrOutputParser()
+llm = ChatOpenAI(model="gpt-3.5-turbo-0125", temperature=0)
+openai_api_key = os.getenv('OPENAI_API_KEY')
 
 SIGNING_SECRET = os.getenv('SIGNING_SECRET')
 signature_verifier = SignatureVerifier(SIGNING_SECRET)
 SLACK_BOT_USER_TOKEN = os.getenv('SLACK_BOT_USER_TOKEN')
 slack_client = WebClient(token=os.getenv('SLACK_BOT_USER_TOKEN'))
 
-response = slack_client.auth_test()
-bot_id = response['user_id']
-print('bot_id', bot_id)
-
-# @csrf_exempt
-# def slack_events(request):
-#     if not signature_verifier.is_valid_request(request.body, request.headers):
-#         return JsonResponse({'error': 'invalid request'}, status=400)
-
-#     payload = json.loads(request.body)
-#     event = payload.get('event', {})
-#     user_id = event.get('user')
-#     text = event.get('text')
-#     channel_id = event.get('channel')
-
-#     if user_id != None and bot_id != user_id:
-#         if text:
-#             chat_bot = GkmitChatBot()
-#             answer = chat_bot.get_response(text)
-#             final_answer = answer['output']
-#             print("final answer --", final_answer)
-#             # send_message_to_slack(channel_id, final_answer)
-
-#     return JsonResponse({'status': 'ok'})
-    
-# def send_message_to_slack(channel_id, message_text):
-#     try:
-#         response = slack_client.chat_postMessage(
-#             channel=channel_id,
-#             text=message_text
-#         )
-#     except SlackApiError as e:
-#         print(f"Got an error: {e.response['error']}")
-
-
-# bot_id = slack_client.auth_test()['user_id']
-# # print('bot_id', bot_id)
+# process_member_details()
+bot_id = slack_client.auth_test()['user_id']
 
 @csrf_exempt
-def slack_events(request):
+def handle_slack_events(request):
+    """Handle Slack events, including processing messages."""
     if not signature_verifier.is_valid_request(request.body, request.headers):
         return JsonResponse({'error': 'invalid request'}, status=400)
-
+    
     payload = json.loads(request.body)
-    # print('payload:', payload)
     event = payload.get('event', {})
-    user_id = event.get('user')
+    slack_user_id = event.get('user')
     text = event.get('text')
-    print('text:', text)
     channel_id = event.get('channel')
-    print('channel_id:', channel_id)
-    print('user_id--', user_id)
-    print(bot_id != user_id)
-    slack_message = request.data
-    print('slack_message', slack_message)
-   
-    if user_id and text and (bot_id != user_id):
-        result = slack_client.users_info(user=user_id)
-        first_name = result['user']['profile']['first_name']
-        last_name = result['user']['profile']['last_name']
-        job_description = result['user']['profile']['title']
-        phone_number = result['user']['profile']['phone']
-        email_address = result['user']['profile']['email']
-        print("user_id:", user_id)
-        print("first_name:", first_name)
-        print("last Name:", last_name)
-        print("job_description:", job_description)
-        print("phone_number:", phone_number)
-        print("email_address:", email_address)
 
-        thread = threading.Thread(target=send_response, args=(text, channel_id,))
+    if slack_user_id and text and (bot_id != slack_user_id):
+        thread = threading.Thread(target=send_response_to_slack, args=(text, slack_user_id, channel_id,))
         thread.start()
         return JsonResponse({'status': 'ok'}, status=200)
     else:
         return JsonResponse({'status': 'ok'}, status=200)
-        # Log the error or handle it as needed
+
+def send_response_to_slack(text, slack_user_id, channel_id):
+    """Send a response to a Slack message."""
+    try:
+        employee = Employee.objects.get(slack_user_id=slack_user_id)
+    except ObjectDoesNotExist:
+        print(f"No employee found for Slack user ID: {slack_user_id}")
+        return
+    chat_bot = GkmitChatBot()
+    answer = chat_bot.get_response(text, employee.id)
+    final_answer = answer['output']
+    response = slack_client.chat_postMessage(channel=channel_id, text=final_answer)
+
+    skill_list = get_skill_list_from_llm(text, employee.id)
+    if skill_list:
+        save_skills_to_database(skill_list, employee.id)
     return JsonResponse({'status': 'ok'}, status=200)
 
-
-def send_response(text, channel_id):
-    # chat_bot = GkmitChatBot()
-    # answer = chat_bot.get_response(text)
-    # final_answer = answer['output']
-    final_answer = "Hello, user!"
-    response = slack_client.chat_postMessage(channel=channel_id, text=final_answer)

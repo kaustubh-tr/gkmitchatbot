@@ -1,2 +1,4 @@
 .env
 .venv
+gkmitslackbot/botservice/main.py
+main1.py

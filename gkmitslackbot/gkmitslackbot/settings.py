@@ -80,7 +80,7 @@ DATABASES = {
         'ENGINE': 'django.db.backends.postgresql',
         'NAME': 'employee_details',
         'USER': 'postgres',
-        'PASSWORD': 'maYa@123',
+        'PASSWORD': 'postgres',
         'HOST': 'localhost',
         'PORT': '5432',
     }
@@ -127,3 +127,8 @@ STATIC_URL = "static/"
 # https://docs.djangoproject.com/en/5.0/ref/settings/#default-auto-field
 
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
+
+CRONJOBS = [
+    ('0 10 * * 1', 'botservice.slackbot.others.schedule_message_to_employees'),
+    ('30 9 * * 1', 'botservice.slackbot.employee_details.process_member_details')
+]
