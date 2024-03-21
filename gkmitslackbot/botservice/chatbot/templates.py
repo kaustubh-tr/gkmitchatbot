@@ -1,14 +1,24 @@
 SYSTEM_MESSAGE = '''You are a GKMIT chatbot. Your goal is to help people learn new skills and help them \
 in their learning journey.
 
-You have access to a tool named SKILL_BY_USER_INPUT_SEARCH. You can use it to find any employee in the \
-company who know that specific skill.
+You have access to a tool named EMPLOYEE_SEARCH_BY_SKILL. You can use it to find any employee in the \
+company who know that specific skill. Call this tool when user want to learn any specific skill.
 
-If this tool does not provide any employee details, then give user, material and learning resources he can use to learn this skill.'''
+You have access to a tool named SKILL_SEARCH_BY_EMPLOYEE. You can use it to find any specific detail about \
+the employee in the company. Call this tool when user want any information related to the employee.
+
+If you use EMPLOYEE_SEARCH_BY_SKILL tool to help provide answer to user, then only give the details what user asked for.
+
+If you use SKILL_SEARCH_BY_EMPLOYEE tool to help provide answer to user, then only give the deatils what user asked for. If employee's skills are not asked then donot provide it.
+
+If these tools provide any employee details or skills details then do not give any futher information from your side like resources and material to learn.
+
+If these tool does not provide any employee details or skills details, then give user, material and learning resources he can use to learn this skill.'''
 
 
-EMPLOYEE_SEARCH_BY_SKILL_DESC = '''Call this function to get employee info related to skills which user ask.
-Use this to better answer your questions. here `employee_id` = {employee_id}.
+EMPLOYEE_SEARCH_BY_SKILL_DESC = '''Call this function to get employee info related to skills, which the user ask.
+Use this to better answer your questions. 
+here `employee_id` = {employee_id}.
 
 If you returned the employee details, then don't mention the other resources from where the user can learn on its own.
 
@@ -19,12 +29,21 @@ If you find the related skill whose employee exists in the database, then before
 details to user, mention that you cannot find the employee details for the asked skill but found these employees related to the skill asked.'''
 
 
+SKILL_SEARCH_BY_EMPLOYEE_DESC = '''Call this function to get info related to employee (employee name) which user ask.
+Use this to better answer your questions. 
+Call this function if the user ask anything about employee (employee name) and want some information in return. here `employee_id` = {employee_id}.
+Do not disclose the skills of an employee unless specifically requested.
+
+If you returned the skill details, then don't mention anything else.
+
+Firstly check if the employee ask by the user exists in the database or not. If yes then return the skills \
+details from the database. If not then find the most similar employee and then return the skills details if they exists. '''
+
+
 GET_RELATED_SKILL_TEMPLATE = '''You are a skill matcher. Your goal is to match a skill to a most relevant \
 skills from a given list: {stored_skills}.
-
 You do it by thinking about what skills person uses together; which skills are correlated to each other; \
 or if some part of the skill matches from the given list.
-
 You have to return the answer in one word.'''
 
 
@@ -32,13 +51,10 @@ GET_SKILL_LIST_TEMPLATE = '''
 You are a GKMIT helper.
 Your job is to analyse the the user's question and find out whether user is having or know some technical skills.
 If yes then return a list of skills.
-
 If by analysing the user's question you found that currently user is not having any technical skill or not \
 learning any new technical skill, instead he want to learn the skill or asking for the employee related to \
 that skill, then return a empty list.
-
 Remember that you have to extract the technical skill from the question rather predict the related skills.
-
 If you cannot analyse the users question, then just return empty list.
 In the user response, '...' represents skill.
 
@@ -48,6 +64,7 @@ Previous conversation:
 New human question: {question}
 Response:
 '''
+
 
 GET_RELATED_SKILL_PROMPT_MESSAGE=[
     {
@@ -61,6 +78,14 @@ GET_RELATED_SKILL_PROMPT_MESSAGE=[
     {
       "role": "assistant",
       "content": "reasoning: because ai is artificial intelligence and it almost matches to artificial intelligence (ai).\n```\n'artificial intelligence (ai)'\n```"
+    },
+    {
+      "role": "user",
+      "content": "here are list of skills.\n['html', 'css', 'java', 'javascript', 'python', 'react', 'node', 'next']\ninput: nodejs"
+    },
+    {
+      "role": "assistant",
+      "content": "reasoning: because node, nodejs and node.js all are same only and it can match to any of node, nodejs, node.js from the list. But from the list only node is present out of node, nodejs, node.js, therefore it matches to node.\n```\n'node'\n```"
     },
     {
       "role": "user",
@@ -212,6 +237,69 @@ GET_RELATED_SKILL_PROMPT_MESSAGE=[
     }
 ]
 
+GET_SIMILAR_EMPLOYEE_PROMPT_MESSAGE=[
+    {
+      "role": "system",
+      "content": "You are employee name matcher. Your goal is to match the employee name to the most similar employee name from a given list.\nYou do it by spelling check. If the employee name spelling matches for more than 50 percent from the list then return that employee. If you cannot find the match, then return 'null'. \nYou have to return the answer in one word. \nhere are the list of employees: {employee_names_list}"
+    },
+    {
+      "role": "user",
+      "content": "here are list of employee.\n['Vinod Pal', 'Michael M', 'Bhavesh Patel', 'James']\ninput: vinod"
+    },
+    {
+      "role": "assistant",
+      "content": "Vinod Pal"
+    },
+    {
+      "role": "user",
+      "content": "here are list of employee.\n['Vinod Pal', 'Michael M', 'Bhavesh Patel', 'James']\ninput: Pal"
+    },
+    {
+      "role": "assistant",
+      "content": "null"
+    },
+    {
+      "role": "user",
+      "content": "here are list of employee.\n['Vinod Pal', 'Michael M', 'Bhavesh Patel', 'James']\ninput: patel"
+    },
+    {
+      "role": "assistant",
+      "content": "Bhavesh Patel"
+    },
+    {
+      "role": "user",
+      "content": "here are list of employee.\n['Vinod Pal', 'Michael M', 'Bhavesh Patel', 'James']\ninput: micheal"
+    },
+    {
+      "role": "assistant",
+      "content": "Michael M"
+    },
+    {
+      "role": "user",
+      "content": "here are list of employee.\n['Vinod Pal', 'Michael M', 'Bhavesh Patel', 'James Upadhyay']\ninput: james"
+    },
+    {
+      "role": "assistant",
+      "content": "James Upadhyay"
+    },
+    {
+      "role": "user",
+      "content": "here are list of employee.\n['Vinod Pal', 'Michael M', 'Bhavesh Patel', 'James']\ninput: BHavEsh pAteL"
+    },
+    {
+      "role": "assistant",
+      "content": "Bhavesh Patel"
+    },
+    {
+      "role": "user",
+      "content": "here are list of employee.\n['Vinod Pal', 'Michael M', 'Bhavesh Patel', 'James']\ninput: baveh patel"
+    },
+    {
+      "role": "assistant",
+      "content": "Bhavesh Patel"
+    },
+]
+
 GET_SKILL_LIST_PROMPT_MESSAGE=[
     ("user", "i want to learn ... "),
     ("assistant", "reasoning: the user wants to learn the skill mentioned, that means he doesn't know that skill and wants to learn that skill, therefore return empty list.\n```\n[]\n```"),
@@ -223,6 +311,18 @@ GET_SKILL_LIST_PROMPT_MESSAGE=[
     ("assistant", "reasoning: the user is asking that, whom can he learn the mentioned skill from, that again means he doesn't know that skill and wants to learn that skill, therefore return empty list.\n```\n[]\n```"),
     ("user", "i know html, css, javascript, react."),
     ("assistant", "reasoning: the user know the skill mentioned, that means , he knows that skill, therefore return a list of skills.\n```\n['html', 'css', 'javascript', 'react']\n```"),
+    ("user", "i know node"),
+    ("assistant", "reasoning: the user know the skill node, that means he knows that skill and node is node.js, therefore return a list of skills.\n```\n['node.js']\n```"),
+    ("user", "i know nodejs"),
+    ("assistant", "reasoning: the user know the skill nodejs, that means he knows that skill and nodejs is node.js, therefore return a list of skills.\n```\n['node.js']\n```"),
+    ("user", "i know react native."),
+    ("assistant", "reasoning: the user know the skill mentioned, that means , he knows that skill and react native is for android, therefore return a list of skills.\n```\n['react native']\n```"),
+    ("user", "i know next"),
+    ("assistant", "reasoning: the user know the skill next, that means he knows that skill and next is next.js, therefore return a list of skills.\n```\n['next.js']\n```"),
+    ("user", "i know nextjs"),
+    ("assistant", "reasoning: the user know the skill nextjs, that means he knows that skill and nextjs is next.js, therefore return a list of skills.\n```\n['next.js']\n```"),
+    ("user", "i had learned html, javascript, react.js, node.js."),
+    ("assistant", "reasoning: the user know the skill mentioned, that means , he knows that skill, therefore return a list of skills.\n```\n['html', 'javascript', 'react.js', 'node.js']\n```"),
     ("user", "i am learning python, django and ml"),
     ("assistant", "reasoning: the user is learning the skills mentioned, that means he knows that skills, therefore return a list of skills.\n```\n['python', 'django', 'ml']\n```"),
     ("user", "i think i am learning ..."),
@@ -252,5 +352,8 @@ GET_SKILL_LIST_PROMPT_MESSAGE=[
     ("user", "I have knowledge of ai"),
     ("assistant", "reasoning: the user is saying that he is having knowlegde of ai i.e. artificial intelligence that means , he knows that skill, therefore return a list of skills (with most standard skill name).\n```\n['artificial intelligence']\n```"),
     ("user", "I have worked on ml"),
-    ("assistant", "reasoning: the user is saying that he have worked on ml i.e. machine learning that means , he knows that skill, therefore return a list of skills (with most standard skill name).\n```\n['machine learning']\n```")        
+    ("assistant", "reasoning: the user is saying that he have worked on ml i.e. machine learning that means , he knows that skill, therefore return a list of skills (with most standard skill name).\n```\n['machine learning']\n```"),
+    ("user", "does someone know ... "),
+    ("assistant", "reasoning: the user is asking that if someone (employee) know ... (skill name), that means he doesn't know it, therefore return a empty list.\n```\n[]\n```"),
+       
 ]

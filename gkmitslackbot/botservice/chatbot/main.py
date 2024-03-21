@@ -19,27 +19,32 @@ from datetime import datetime
 
 from ..models import ChatHistory
 from .templates import SYSTEM_MESSAGE
-from .tools import get_employee_by_skill_tool
+from .tools import get_employee_by_skill_tool, get_skill_by_employee_tool
 from .utils import get_chat_history, get_postgres_conn, get_stored_skills
 from .others import save_conversation_in_database, get_related_skill_from_llm
 
 load_dotenv()
-llm = ChatOpenAI(model="gpt-3.5-turbo-0125", temperature=0)
 openai_api_key = os.getenv('OPENAI_API_KEY')
+
 
 class GkmitChatBot:
     def __init__(self):
         self.llm = self.get_llm()
 
+
     def get_llm(self):
-        llm = ChatOpenAI(model="gpt-3.5-turbo-0125", temperature=0)
+        llm = ChatOpenAI(model="gpt-3.5-turbo-0125", temperature=0, max_tokens=1000)
         return llm
+
 
     def get_tool_list(self, employee_id) -> list:
         employee_by_skill_search_tool = get_employee_by_skill_tool(employee_id)
+        skill_by_employee_search_tool = get_skill_by_employee_tool(employee_id)
         return [
             employee_by_skill_search_tool,
+            skill_by_employee_search_tool,
         ]
+
 
     def get_response(self, question, employee_id):
         try:
@@ -61,7 +66,6 @@ class GkmitChatBot:
                 return_intermediate_steps=True
             )
             answer = agent.invoke(question)
-
             save_conversation_in_database({
                 "message": question,
                 "response": answer['output'],
@@ -72,6 +76,7 @@ class GkmitChatBot:
 
         except Exception as e:
             return "Sorry, I am unable to answer this question."
+
 
     def add_chat_history_to_agent(self, employee_id) -> ChatMessageHistory:
         chat_history = get_chat_history(employee_id)

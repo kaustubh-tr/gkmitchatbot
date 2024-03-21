@@ -19,7 +19,7 @@ slack_client = WebClient(token=os.getenv('SLACK_BOT_USER_TOKEN'))
 
 def get_slack_user_ids(member_details):
     """Extract slack_user_id from member_details."""
-    return [member['id'] for member in member_details if member['name'] not in ['slackbot', 'gkmitchatbot']]
+    return [member['id'] for member in member_details if member['name'] not in ['slackbot'] and member['is_bot']==False]
 
 def delete_non_existing_employees(slack_user_ids):
     """Delete employees not found in slack_user_ids."""
@@ -29,16 +29,35 @@ def delete_non_existing_employees(slack_user_ids):
             employee.delete()
             print(f"Deleted employee {employee.slack_user_id} as it was not found in member_details.")
 
+def set_job_level_separately(member):
+    title = member['profile']['title'].lower() if member['profile']['title'] else ''
+    if 'jr' in title or 'jr.' in title or 'junior' in title:
+        job_level = 'junior'
+    elif 'sr' in title or 'sr.' in title or 'senior' in title:
+        job_level = 'senior'
+    elif 'lead' in title:
+        job_level = 'lead'
+    elif 'intern' in title:
+        job_level = 'intern'
+    elif not title:
+        job_level = ''
+    else:
+        job_level = 'mid'
+    return job_level
+
 def update_or_create_employee(member):
     """Update or create an employee based on member details."""
     try:
+        job_level = set_job_level_separately(member)
         existing_employee, created = Employee.objects.get_or_create(
             slack_user_id=member['id'],
             defaults={
+                'full_name': member['profile']['real_name'],
                 'first_name': member['profile']['first_name'],
                 'last_name': member['profile']['last_name'],
                 'phone_number': member['profile']['phone'],
                 'email_address': member['profile']['email'],
+                'job_level': job_level,
                 'joining_date': datetime.strptime(member['profile']['start_date'], '%Y-%m-%d') if 'start_date' in member['profile'] else None,
                 'designation': member['profile']['title'],
             }
@@ -54,7 +73,9 @@ def update_employee_fields(employee, member):
     """Update employee fields if they are missing."""
     with transaction.atomic():
         update_fields = []
-        # Check if the fields in member[] are not empty before updating
+        if member['profile']['real_name'] and not employee.full_name:
+            employee.full_name = member['profile']['real_name']
+            update_fields.append('full_name')
         if member['profile']['first_name'] and not employee.first_name:
             employee.first_name = member['profile']['first_name']
             update_fields.append('first_name')
@@ -73,7 +94,12 @@ def update_employee_fields(employee, member):
         if member['profile']['title'] and not employee.designation:
             employee.designation = member['profile']['title']
             update_fields.append('designation')
-
+        
+        job_level = set_job_level_separately(member)
+        if not employee.job_level or employee.job_level != job_level:
+            employee.job_level = job_level
+            update_fields.append('job_level')
+        
         if update_fields:
             employee.save(update_fields=update_fields)
             print(f"Updated employee {member['id']} with missing fields.")
@@ -82,11 +108,14 @@ def update_employee_fields(employee, member):
 
 def process_member_details():
     """Main function to process member_details."""
-    member_list = slack_client.users_list()
-    member_details = member_list['members']
-    slack_user_ids = get_slack_user_ids(member_details)
-    for member in member_details:
-        if member['name'] not in ['slackbot', 'gkmitchatbot']:
-            update_or_create_employee(member)
-    delete_non_existing_employees(slack_user_ids)
-
+    try:
+        member_list = slack_client.users_list()
+        member_details = member_list['members']
+        slack_user_ids = get_slack_user_ids(member_details)
+        for member in member_details:
+            if member['name'] not in ['slackbot'] and member['is_bot']==False :
+                update_or_create_employee(member)
+        # delete_non_existing_employees(slack_user_ids)
+    except Exception as e:
+        print(f"An error occurred: {e}")
+        return None

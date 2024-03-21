@@ -29,7 +29,7 @@ from ..chatbot.utils import get_chat_history
 SLACK_BOT_USER_TOKEN = os.getenv('SLACK_BOT_USER_TOKEN')
 slack_client = WebClient(token=os.getenv('SLACK_BOT_USER_TOKEN'))
 
-llm = ChatOpenAI(model="gpt-3.5-turbo-0125", temperature=0)
+llm = ChatOpenAI(model="gpt-3.5-turbo-0125", temperature=0, max_tokens=200)
 openai_api_key = os.getenv('OPENAI_API_KEY')
 
 
@@ -47,21 +47,24 @@ def add_chat_history_to_conversation_memory(employee_id)-> ConversationBufferMem
 
 def get_skill_list_from_llm(text, employee_id):
     """Extract a list of skills from the LLM based on the provided text and employee ID."""
-    llm = ChatOpenAI(model="gpt-3.5-turbo-0125")
-    formatted_messages = [("system", GET_SKILL_LIST_TEMPLATE)] + GET_SKILL_LIST_PROMPT_MESSAGE + [("user", "{question}")]
-    prompt = ChatPromptTemplate.from_messages(formatted_messages)
-    memory = add_chat_history_to_conversation_memory(employee_id)
-    conversation = LLMChain(
-        llm=llm,
-        prompt=prompt,
-        verbose=False,
-        memory=memory
-    )
-    content = conversation.invoke({"question": text})
-    output = content['text'].split('\n')[-2]
-    skill_list = ast.literal_eval(output.strip("'"))
-    print(skill_list)
-    return skill_list
+    try:
+        llm = ChatOpenAI(model="gpt-3.5-turbo-0125")
+        formatted_messages = [("system", GET_SKILL_LIST_TEMPLATE)] + GET_SKILL_LIST_PROMPT_MESSAGE + [("user", "{question}")]
+        prompt = ChatPromptTemplate.from_messages(formatted_messages)
+        memory = add_chat_history_to_conversation_memory(employee_id)
+        conversation = LLMChain(
+            llm=llm,
+            prompt=prompt,
+            verbose=False,
+            memory=memory
+        )
+        content = conversation.invoke({"question": text})
+        output = content['text'].split('\n')[-2]
+        skill_list = ast.literal_eval(output.strip("'"))
+        return skill_list
+    except Exception as e:
+        print("An error occurred:", e)
+        return None
 
 
 def schedule_message_to_employees():
